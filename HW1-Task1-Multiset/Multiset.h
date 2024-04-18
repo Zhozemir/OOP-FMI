@@ -23,7 +23,7 @@ public:
     void print() const;
     void writeBin(std::ofstream& ofs);
     void readBin(std::ifstream& ifs);
-    void printLikeInMemory() const;
+    void memoryRepresentation() const;
 
 
     friend MultiSet intersection (const MultiSet& lhs, const MultiSet& rhs);
