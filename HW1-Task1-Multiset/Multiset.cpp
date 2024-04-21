@@ -1,268 +1,310 @@
-#include "MultiSet.h"
+#include <iostream>
+#include "MultiSet.h";
+#include <fstream>
 
-MultiSet::MultiSet() {
-
-    buckets = nullptr;
-    bits = 0;
-    maxNum = 0;
-
-}
-
-void MultiSet::copy(const MultiSet& other) {
-
-    maxNum = other.maxNum;
-    bits = other.bits;
-    buckets = new uint8_t[maxNum];
-
-    for (unsigned i = 0; i < maxNum; ++i) {
-
-        buckets[i] = other.buckets[i];
-
-    }
+MultiSet::MultiSet(unsigned n, unsigned k) {
+    _bucketsCount = ((n + 1) * k) / _elementsInBucket + 1;
+    _buckets = new uint8_t[_bucketsCount]{ 0 };
+    _n = n + 1;
+    _k = k;
 }
 
 void MultiSet::free() {
-
-    delete[] buckets;
-    buckets = nullptr;
-
+    delete[] _buckets;
+    _bucketsCount = _n = _k = 0;
+    _buckets = nullptr;
 }
 
-MultiSet::MultiSet(unsigned maxNum, uint8_t bits) {
-
-    this->maxNum = maxNum;
-    this->bits = bits;
-    buckets = new uint8_t[maxNum];
-
-    for (unsigned i = 0; i < maxNum; ++i) {
-
-        buckets[i] = 0;
-
+void MultiSet::copyFrom(const MultiSet& other) {
+    _buckets = new uint8_t[other._bucketsCount];
+    for (size_t i = 0; i < other._bucketsCount; i++)
+    {
+        _buckets[i] = other._buckets[i];
     }
+    _bucketsCount = other._bucketsCount;
+    _n = other._n;
+    _k = other._k;
+}
+
+MultiSet::MultiSet(unsigned n, unsigned k, unsigned bucketsCount, uint8_t* buckets) {
+    _buckets = new uint8_t[bucketsCount];
+    for (size_t i = 0; i < bucketsCount; i++)
+    {
+        _buckets[i] = buckets[i];
+    }
+    _bucketsCount = bucketsCount;
+    _n = _n;
+    _k = _k;
 }
 
 MultiSet::MultiSet(const MultiSet& other) {
-
-    copy(other);
-
+    copyFrom(other);
 }
-
-MultiSet& MultiSet::operator=(const MultiSet& other) {
-
-    if (this != &other) {
-
+MultiSet& MultiSet::operator=(const MultiSet& other)
+{
+    if (this != &other)
+    {
         free();
-        copy(other);
-
+        copyFrom(other);
     }
-
     return *this;
 }
-
-MultiSet::~MultiSet() {
-
+MultiSet::~MultiSet()
+{
     free();
-
 }
 
-void MultiSet::add(unsigned num) {
-
-    if (num >= maxNum || buckets[num] >= (1 << bits) - 1)
-        return;
-
-    buckets[num]++;
+unsigned MultiSet::getNumberStartIndex(unsigned num) const
+{
+    return _k * (num - 1);
 }
 
-bool MultiSet::contains(unsigned num) const {
-
-    return num < maxNum && buckets[num] > 0;
-
+bool MultiSet::isInOneBucket(unsigned startIndex) const {
+    return startIndex / _elementsInBucket == (startIndex + _k - 1) / _elementsInBucket;
 }
 
-unsigned MultiSet::countOccurrences(unsigned num) const {
+unsigned MultiSet::getBucketIndex(unsigned num) const
+{
+    return num / _elementsInBucket;
+}
 
-    if (num >= maxNum) {
-        return 0;
+unsigned creatingMaskWithOnes(size_t start, size_t end) {
+    unsigned mask = 0;
+    for (size_t i = start; i < end; i++)
+    {
+        mask += (1 << i);
     }
-
-    return buckets[num];
-
+    return mask;
 }
 
-void MultiSet::print() const {
+void MultiSet::add(unsigned num)
+{
+    num++;
+    if (num > _n) {
+        return;
+    }
+    unsigned startIndexOfNumber = getNumberStartIndex(num);
+    unsigned bucketIndex = getBucketIndex(startIndexOfNumber);
+    if (isInOneBucket(startIndexOfNumber)) {
+        uint8_t mask = 1 << _elementsInBucket - ((startIndexOfNumber + _k - 1) % _elementsInBucket) - 1;
+        _buckets[bucketIndex] += mask;
+    }
+    else {
+        unsigned elementsInFirstBucket = _elementsInBucket - (startIndexOfNumber % _elementsInBucket);
+        unsigned elementsInSecondBucket = _k - elementsInFirstBucket;
 
-    std::cout << "{ ";
+        unsigned mask = 0;
 
-    for (int i = 0; i < maxNum; i++) {
+        for (size_t i = _elementsInBucket - 1; i >= _elementsInBucket - elementsInSecondBucket; i--)
+        {
+            mask += (1 << i);
+        }
+        if (!((_buckets[bucketIndex + 1] & mask) == mask)) {
+            _buckets[bucketIndex + 1] += (1 << (_elementsInBucket - elementsInSecondBucket));
+            return;
+        }
 
-        for (int j = 0; j < buckets[i]; j++) {
-
-            std::cout << i << " ";
-
+        _buckets[bucketIndex + 1] &= (~mask);
+       
+        mask = creatingMaskWithOnes(0, elementsInFirstBucket);
+        if (!((_buckets[bucketIndex] & mask) == mask)) {
+            _buckets[bucketIndex]++;
         }
     }
-
-    std::cout << "}" << std::endl;
 }
 
-void MultiSet::writeBin(std::ofstream& ofs) {
+unsigned MultiSet::countOfNumber(unsigned num) const {
+    num++;
+    if (num > _n) {
+        return 0;
+    }
+    unsigned startIndexOfNumber = getNumberStartIndex(num);
+    unsigned bucketIndex = getBucketIndex(startIndexOfNumber);
+    unsigned startIndexInTheBucket = startIndexOfNumber % _elementsInBucket;
+    if (isInOneBucket(startIndexOfNumber)) {
+        unsigned movedBucked = _buckets[bucketIndex] >> (_elementsInBucket - _k - startIndexInTheBucket);
+        unsigned mask = creatingMaskWithOnes(0, _k);
+
+        return (movedBucked & mask);
+    }
+    else {
+        unsigned elementsInFirstBucket = _elementsInBucket - (startIndexOfNumber % _elementsInBucket);
+        unsigned elementsInSecondBucket = _k - elementsInFirstBucket;
+        unsigned mask = creatingMaskWithOnes(0, elementsInFirstBucket);;
+        unsigned result = ((_buckets[bucketIndex] & mask) << elementsInSecondBucket); 
+
+        unsigned movedBucked = _buckets[bucketIndex + 1] >> (_elementsInBucket - elementsInSecondBucket);
+        mask = creatingMaskWithOnes(0, elementsInSecondBucket);
+        return result + (movedBucked & mask);
+    }
+
+
+}
+
+void MultiSet::printAllAvailable() const {
+    std::cout << "{ ";
+    for (size_t i = 0; i < _n; i++)
+    {
+        if (countOfNumber(i) > 0) {
+            std::cout << i << ", ";
+        }
+    }
+    std::cout << " }";
+}
+
+void printBinary(uint8_t num) {
+    int size = sizeof(num) * 8;
+    for (int i = size - 1; i >= 0; i--) {
+        int bit = (num >> i) & 1;
+        std::cout << bit;
+    }
+}
+
+void MultiSet::print() const
+{
+    for (size_t i = 0; i < _bucketsCount; i++)
+    {
+        printBinary(_buckets[i]);
+        std::cout << std::endl;
+    }
+}
+
+void MultiSet::serialize(std::ofstream& ofs) const {
 
     if (!ofs.is_open()) {
         return;
     }
 
-    ofs.write((const char*)&maxNum, sizeof(maxNum));
-    ofs.write((const char*)&bits, sizeof(bits));
+    ofs.write((const char*)&_bucketsCount, sizeof(_bucketsCount));
+    ofs.write((const char*)&_n, sizeof(_n));
+    ofs.write((const char*)&_k, sizeof(_k));
 
-    ofs.write((const char*)buckets, sizeof(uint8_t) * maxNum + 1);
+    ofs.write((const char*)_buckets, sizeof(uint8_t) * _bucketsCount);
 
     ofs.close();
 }
 
-void MultiSet::readBin(std::ifstream& ifs) {
+void MultiSet::deserialize(std::ifstream& ifs) {
 
     if (!ifs.is_open()) {
         return;
     }
 
-    unsigned size;
-    ifs.read((char*)&size, sizeof(size));
+    unsigned bucketsCount;
+    ifs.read((char*)&bucketsCount, sizeof(bucketsCount));
 
-    uint8_t bits;
-    ifs.read((char*)&bits, sizeof(bits));
+    unsigned n;
+    ifs.read((char*)&n, sizeof(n));
 
-    delete[]this->buckets;
+    unsigned k;
+    ifs.read((char*)&k, sizeof(k));
 
-    this->buckets = new uint8_t[size];
-    this->maxNum = size;
+    delete[]this->_buckets;
 
-    ifs.read((char*)buckets, sizeof(uint8_t) * maxNum + 1);
+    this->_buckets = new uint8_t[bucketsCount];
+    this->_bucketsCount = bucketsCount;
+    this->_n = n;
+    this->_k = k;
+
+    ifs.read((char*)_buckets, sizeof(uint8_t) * bucketsCount);
 
     ifs.close();
 }
 
-void MultiSet::printLikeInMemory() const {
-
-    for (int i = maxNum - 1; i >= 0; i--) {
-
-        std::cout << (buckets[i] ? "1" : "0");
-
-    }
-
-    std::cout << std::endl;
-}
-
-MultiSet intersection (const MultiSet& lhs, const MultiSet& rhs) {
-
-    unsigned minMaxNum = std::min(lhs.maxNum, rhs.maxNum);
-    uint8_t minBits = std::min(lhs.bits, rhs.bits);
-    MultiSet intersectionRes (minMaxNum, minBits);
-
-    for (int i = 0; i < minMaxNum; i++) {
-
-        if (lhs.contains(i) && rhs.contains(i)) {
-
-            intersectionRes.buckets[i] = std::min(lhs.buckets[i], rhs.buckets[i]);
-
+unsigned MultiSet::getCountOfAllNumbers() const {
+    unsigned result = 0;
+    for (size_t i = 0; i < _n; i++)
+    {
+        if (countOfNumber(i) > 0) {
+            result++;
         }
     }
-
-    return intersectionRes;
+    return result;
 }
 
-MultiSet difference(const MultiSet& lhs, const MultiSet& rhs) {
-
-    MultiSet differenceRes (lhs.maxNum, lhs.bits);
-
-    for (int i = 0; i < lhs.maxNum; i++) {
-
-        if (lhs.contains(i) && (!rhs.contains(i) || lhs.buckets[i] > rhs.buckets[i])) {
-
-            differenceRes.buckets[i] = lhs.buckets[i] - (rhs.contains(i) ? rhs.buckets[i] : 0);
-
+void MultiSet::getAllAvailable(int*& numbers, unsigned& size) const {
+    size = getCountOfAllNumbers();
+    numbers = new int[size];
+    int current = 0;
+    for (size_t i = 0; i < _n; i++)
+    {
+        if (countOfNumber(i) > 0) {
+            numbers[current] = i;
+            current++;
         }
     }
-
-    return differenceRes;
 }
 
-MultiSet complement(const MultiSet& mSet) {
-
-    MultiSet complemented(mSet.maxNum, mSet.bits);
-
-    for (int i = 0; i < mSet.maxNum; i++) {
-
-        if (mSet.contains(i)) {
-
-            complemented.buckets[i] = (1 << mSet.bits) - 1 - mSet.buckets[i];
-
-        }
-        else {
-
-            complemented.buckets[i] = (1 << mSet.bits) - 1;
-
+void intersectionOfSets(const MultiSet& lhs, const MultiSet& rhs, int*& result, unsigned& size)
+{
+    if (result) {
+        delete[] result;
+    }
+    int* numbersInFirst = nullptr;
+    size = 0;
+    lhs.getAllAvailable(numbersInFirst, size);
+    result = new int[size];
+    unsigned curr = 0;
+    for (size_t i = 0; i < size; i++)
+    {
+        if (rhs.countOfNumber(numbersInFirst[i]) > 0) {
+            result[curr] = numbersInFirst[i];
+            curr++;
         }
     }
-    return complemented;
+    for (size_t i = curr; i < size; i++)
+    {
+        result[i] = -1;
+    }
+    size = curr;
+    delete[] numbersInFirst;
 }
 
-int main() {
-    // Create a MultiSet with maximum number 10 and each element can have up to 3 occurrences (2^2-1)
-    MultiSet ms1(10, 2);
+void differenceOfSets(const MultiSet& lhs, const MultiSet& rhs, int*& result, unsigned& size)
+{
+    if (result) {
+        delete[] result;
+    }
+    int* numbersInFirst = nullptr;
+    size = 0;
+    lhs.getAllAvailable(numbersInFirst, size);
+    result = new int[size];
+    unsigned curr = 0;
+    for (size_t i = 0; i < size; i++)
+    {
+        if (rhs.countOfNumber(numbersInFirst[i]) == 0) {
+            result[curr] = numbersInFirst[i];
+            curr++;
+        }
+    }
+    for (size_t i = curr; i < size; i++)
+    {
+        result[i] = -1;
+    }
+    size = curr;
+    delete[] numbersInFirst;
+}
 
-    // Add some elements to the MultiSet
-    ms1.add(2);
-    ms1.add(2);
-    ms1.add(3);
-    ms1.add(5);
-    ms1.add(5);
-    ms1.add(5);
-
-    // Print the current state of MultiSet
-    std::cout << "MultiSet ms1: ";
-    ms1.print();
-
-    // Print how the MultiSet is stored in memory
-    std::cout << "Memory representation of ms1: ";
-    ms1.printLikeInMemory();
-
-    // Create another MultiSet for operations
-    MultiSet ms2(10, 2);
-    ms2.add(3);
-    ms2.add(5);
-    ms2.add(5);
-
-    std::cout << "MultiSet ms2: ";
-    ms2.print();
-
-    // Intersect ms1 and ms2
-    MultiSet intersectionRes = intersection (ms1, ms2);
-    std::cout << "Intersection of ms1 and ms2: ";
-    intersectionRes.print();
-
-    // Difference ms1 - ms2
-    MultiSet differenceRes = difference (ms1, ms2);
-    std::cout << "Difference (ms1 - ms2): ";
-    differenceRes.print();
-
-    // Complement of ms1
-    MultiSet complemented = complement(ms1);
-    std::cout << "Complement of ms1: ";
-    complemented.print();
-
-    // Serialization of ms1
-    std::ofstream ofs("multiset.bin", std::ios::binary);
-    ms1.writeBin(ofs);
-    ofs.close();
-
-    // Deserialization into ms3
-    MultiSet ms3;
-    std::ifstream ifs("multiset.bin", std::ios::binary);
-    ms3.readBin(ifs);
-    ifs.close();
-
-    std::cout << "Deserialized MultiSet ms3: ";
-    ms3.print();
-
-    return 0;
+void MultiSet::multisetExtension(int num) {
+    num++;
+    if (num > _n) {
+        return;
+    }
+    unsigned startIndexOfNumber = getNumberStartIndex(num);
+    unsigned bucketIndex = getBucketIndex(startIndexOfNumber);
+    unsigned startIndexInTheBucket = startIndexOfNumber % _elementsInBucket;
+    int mask = 0;
+    if (isInOneBucket(startIndexOfNumber)) {
+        mask = creatingMaskWithOnes(0, _k);
+        _buckets[bucketIndex] ^= (mask << (_elementsInBucket - _k - startIndexInTheBucket));
+    }
+    else {
+        unsigned elementsInFirstBucket = _elementsInBucket - (startIndexOfNumber % _elementsInBucket);
+        unsigned elementsInSecondBucket = _k - elementsInFirstBucket;
+        mask = creatingMaskWithOnes(0, elementsInSecondBucket);
+        _buckets[bucketIndex + 1] ^= (mask << (_elementsInBucket - elementsInSecondBucket));
+        mask = 0;
+        mask = creatingMaskWithOnes(0, elementsInFirstBucket);
+        _buckets[bucketIndex] ^= mask;
+    }
 }
