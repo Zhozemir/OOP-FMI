@@ -1,7 +1,3 @@
-
-//  Made together with: 0MI0700218, 0MI0700220, 0MI0700270
-
-
 #include <stdio.h>
 #include "ModifiableIntegerFunction.h"
 #include <iostream>
