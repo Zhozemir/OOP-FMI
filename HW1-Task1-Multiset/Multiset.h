@@ -1,33 +1,43 @@
 #include <iostream>
-#include <fstream>
 
-class MultiSet {
+class MultiSet
+{
+
 private:
-    uint8_t* buckets;
-    uint8_t bits;
-    unsigned maxNum;
 
-    void copy(const MultiSet& other);
-    void free();
+	uint8_t* _buckets = nullptr;
+	unsigned _bucketsCount = 0;
+	unsigned _n = 0;
+	unsigned _k = 0;
+	const unsigned _elementsInBucket = sizeof(uint8_t) * 8;
+
+	void free();
+	void copyFrom(const MultiSet& other);
+
+
+	unsigned getBucketIndex(unsigned number) const;
+	bool isInOneBucket(unsigned startIndex) const;
+	unsigned getNumberStartIndex(unsigned num) const;
+	void getAllAvailable(int*& numbers, unsigned& size) const;
+	unsigned getCountOfAllNumbers() const;
 
 public:
-    MultiSet();
-    MultiSet(unsigned maxNum, uint8_t bits);
-    MultiSet(const MultiSet& other);
-    MultiSet& operator=(const MultiSet& other);
-    ~MultiSet();
 
-    void add(unsigned num);
-    bool contains(unsigned num) const;
-    unsigned countOccurrences(unsigned num) const;
-    void print() const;
-    void writeBin(std::ofstream& ofs);
-    void readBin(std::ifstream& ifs);
-    void memoryRepresentation() const;
+	MultiSet() = default;
+	MultiSet(unsigned n, unsigned k, unsigned bucketsCount, uint8_t* buckets);
+	MultiSet(unsigned n, unsigned k);
 
+	MultiSet(const MultiSet& other);
+	MultiSet& operator=(const MultiSet& other);
+	~MultiSet();
 
-    friend MultiSet intersection (const MultiSet& lhs, const MultiSet& rhs);
-    friend MultiSet difference (const MultiSet& lhs, const MultiSet& rhs);
-    friend MultiSet complement (const MultiSet& mSet);
-    
+	void add(unsigned num);
+	void print() const;
+	unsigned countOfNumber(unsigned num) const;
+	void printAllAvailable() const;
+	void serialize(std::ofstream& ofs) const;
+	void deserialize(std::ifstream& ifs);
+	void multisetExtension(int num);
+	friend void intersectionOfSets(const MultiSet& lhs, const MultiSet& rhs, int*& result, unsigned& sizeOfResult);
+	friend void differenceOfSets(const MultiSet& lhs, const MultiSet& rhs, int*& result, unsigned& sizeOfResult);;
 };
